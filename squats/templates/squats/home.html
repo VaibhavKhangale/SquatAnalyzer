@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body %}
+    <div class="container mt-3">
+        
+        <div class="d-flex justify-content-center">
+            <button id="start-button" onclick="startCamera()" type="button" class="btn btn-outline-dark w-25">Start</button>
+            <button id="stop-button" onclick="stopCamera()" style="display:none;" type="button" class="btn btn-outline-dark w-25">Stop</button>
+        </div>
+
+        <br>
+
+        <div class="d-flex">
+            <!-- Video Section (Left) -->
+            <div class="video-container">
+                <img id="videoFeed" src="{% static 'images/Video is off.png' %}" class="video-frame" alt="Live Video Feed" style="max-width:640px;">
+                <div id="timer" class="timer-box">TIME : 00:00</div>
+            </div>
+
+            <div class="squat-counter ms-5 mt-3 p-3" style="width:500px;height:350px; text-align:center;background-color: rgba(0, 0, 0, 0.3);border-radius: 10px;">
+                <h4  style="font-family:Arial"> Squat Count </h4> 
+                <h1 style="font-weight:bold;font-size:64px;" id="squat-count">0</h1>
+                <h1>___________________________</h1>
+                <div id="squat-messages" class="mt-3">
+                    <ul id="message-list"></ul>  <!-- Messages will be added here -->
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <audio id="perfectSound" src="{% static 'sounds/perfect_sound.mp3' %}"></audio>
+    
+    <script>
+        let startTime, timerInterval;
+        let messageQueue = [];  // ✅ Stores last 4 messages
+    
+        function startCamera() {
+            document.getElementById("start-button").style.display = "none";  
+            document.getElementById("stop-button").style.display = "inline-block"; 
+            document.getElementById("videoFeed").src = "{% url 'video_feed' %}";
+            document.getElementById("squat-count").innerText = "0";  // Reset count
+            document.getElementById("message-list").innerHTML = "";  // Reset messages
+    
+            messageQueue = [];  
+            document.getElementById("message-list").innerHTML = "";  
+
+            // ✅ Start Timer
+            startTime = new Date();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+    
+        function stopCamera() {
+            document.getElementById("start-button").style.display = "inline-block";  
+            document.getElementById("stop-button").style.display = "none";    
+            document.getElementById("videoFeed").src = "{% static 'images/Video is off.png' %}";
+    
+            fetch("{% url 'stop_feed' %}");
+    
+            // ✅ Stop Timer
+            clearInterval(timerInterval);
+            document.getElementById("timer").innerText = "TIME : 00:00";
+        }
+    
+        function updateTimer() {
+            let now = new Date();
+            let elapsedSeconds = Math.floor((now - startTime) / 1000);
+            let minutes = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+            let seconds = String(elapsedSeconds % 60).padStart(2, '0');
+    
+            document.getElementById("timer").innerText = `TIME : ${minutes}:${seconds}`;
+        }
+    
+        function updateCount(newCount) {
+            console.log("Squat Count Updated:", newCount);
+            document.getElementById("squat-count").innerText = newCount;
+        }
+    
+        function updateMessage(newMessage) {
+            console.log("New Squat Message:", newMessage);
+        
+            // ✅ Define message colors
+            let messageColors = {
+                "Get Ready": "#FFFFFF",   
+                "Go Deeper": "#FFFF99",   
+                "Nice": "#99FF66",        
+                "Perfect": "#00cc00"      
+            };
+        
+            // ✅ Get the last message from the queue
+            let lastMessage = messageQueue.length > 0 ? messageQueue[messageQueue.length - 1] : null;
+        
+            // ✅ Enforce message transition rules
+            if (lastMessage === "Perfect" && newMessage !== "Get Ready") return;
+            if (lastMessage === "Nice" && newMessage !== "Perfect" && newMessage !== "Get Ready") return;
+        
+            if (newMessage === "Perfect") {
+                document.getElementById("perfectSound").play();
+            }
+
+            // ✅ Add new message to queue
+            messageQueue.push(newMessage);
+            
+            // ✅ Keep only the last 4 messages
+            if (messageQueue.length > 4) {
+                messageQueue.shift();  // Remove oldest message
+            }
+        
+            // ✅ Update message list in the UI
+            let messageList = document.getElementById("message-list");
+            messageList.innerHTML = "";  // Clear list
+        
+            messageQueue.forEach((msg) => {
+                let messageElement = document.createElement("div");
+                messageElement.innerText = msg;
+                messageElement.style.color = messageColors[msg] || "#FFFFFF"; // Default white if not listed
+                messageElement.style.fontSize = "18px";
+                messageElement.style.marginBottom = "7px";
+                messageElement.style.background = "transparent"; // ✅ Transparent background
+                messageElement.style.fontFamily = "Arial, sans-serif";
+        
+                messageList.appendChild(messageElement);
+            });
+        }
+                
+        // ✅ Single EventSource for squat count and messages
+        const eventSource = new EventSource("{% url 'squat_count_feed' %}");
+        
+        eventSource.addEventListener("squat_count", function(event) {
+            updateCount(event.data);
+        });
+    
+        eventSource.addEventListener("squat_message", function(event) {
+            updateMessage(event.data);
+        });
+    </script>
+    
+{% endblock body %}
+
